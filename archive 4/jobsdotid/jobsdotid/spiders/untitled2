@@ -1,0 +1,32 @@
+# -*- coding: utf-8 -*-
+import scrapy
+from scrapy.spiders import CrawlSpider, Rule, Request
+
+
+import datetime
+import lxml.html
+import re
+import mysql.connector
+
+
+class JobssearchSpider(scrapy.Spider):
+    name                 = 'jobspage'
+    allowed_domains      = ['jobs.id']
+    start_urls           = ['https://www.jobs.id/lowongan/MjY4MDYz/financial-services-consultant-rifan-financindo-bandung-pt?qt_ref=search&qt_page=37&qt_pos=1']
+    
+    def parse(self, response):    
+        # -------------------------------------------------------------------------------------------- URL
+            url = response.meta.get('url') 
+            
+        # -------------------------------------------------------------------------------------------- SITE
+            site = 'jobs.id'
+            
+        # -------------------------------------------------------------------------------------------- DATE TIME            
+            now = datetime.datetime.now()        
+            date_time = now.strftime("%Y-%m-%d %H:%M:%S")
+            
+        
+         # ------------------------------------------------------------------------------- 
+            yield {'site': site, 
+                   'url': url, 
+                   'date_time' : date_time}

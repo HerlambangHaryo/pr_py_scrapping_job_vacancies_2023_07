@@ -1,0 +1,160 @@
+# -*- coding: utf-8 -*-
+import scrapy
+from scrapy.spiders import CrawlSpider, Rule, Request
+
+import datetime
+import lxml.html
+import re
+import mysql.connector
+
+class JobsidscrapsearchSpider(scrapy.Spider):
+    name                 = 'jobsidscrap'
+    allowed_domains      = ['jobs.id']
+    start_urls           = ['https://www.jobs.id/lowongan-kerja']
+    
+    def parse(self, response):    
+        page_number = response.meta.get('page_number') or 1         
+        
+        data_scrap       = response.xpath('//div[@class="col-xs-8 col-md-10"]')
+        
+        for row in data_scrap:                       
+            url          = row.xpath('h3/a[@class="bold"]/@href').extract_first()             
+            yield Request(url, callback=self.parse_page,meta={'url': url,'page_number': page_number})
+            
+        if int(page_number) == 2: 
+            page_number = 2
+        elif int(page_number) >= 1: 
+            page_number = int(page_number) + 1
+
+        next_page     = "https://www.jobs.id/lowongan-kerja?kata-kunci=indonesia&halaman="+ str(page_number)
+        
+        yield Request(next_page, callback=self.parse,meta={'page_number': page_number})
+           
+    def parse_page(self, response):
+        # -------------------------------------------------------------------------------------------- SOURCE
+            source = 'jobs.id'            
+            url = response.meta.get('url') 
+            
+        # -------------------------------------------------------------------------------------------- COMPANY
+            company = response.xpath('//div[@class="col-sm-10 col-xs-12"]/h5/a/strong[@class="text-muted"]/text()').extract_first(default = None) 
+            address = response.xpath('//div[@class="panel-body"]/p[1]/b/text()').extract_first()
+            
+            location_1 = response.xpath('//span[@class="location"]/text()').extract_first()
+            location_2 = response.xpath('//a[@class="location-more"]/text()').extract_first(default='')
+            city = location_1 + location_2
+            
+            phone = None
+            website = None
+            industry = response.xpath('//div[@class="cyan semi-bold"]/p[1]/b/text()').extract_first()
+            
+        # -------------------------------------------------------------------------------------------- Job
+            domain = response.xpath('//a[@class="cyan semi-bold"]/text()').extract_first()
+            
+            temp_job_title = response.xpath('//h1[@class="clear-top bold"]/text()').extract_first()
+            title      = temp_job_title.strip() 
+            
+            position = None
+            
+            salary = None               
+            if(len(data_scrap)) == 2:
+                temp_salary_1 = response.xpath('//div[@class="col-xs-12 col-sm-6 col-md-4"][2]/h4/span[@class="semi-bold text-gray"]/text()').extract_first()
+                salary = temp_salary_1
+                if(salary != 'Gaji Dirahasiakan'):
+                    temp_salary_1 = response.xpath('//div[@class="col-xs-12 col-sm-6 col-md-4"][2]/h4/span[@class="semi-bold currency text-success"]/text()').extract_first()
+                    temp_salary_2 = response.xpath('//div[@class="col-xs-12 col-sm-6 col-md-4"][2]/h4/span[@class="semi-bold"][1]/text()').extract_first()
+                    temp_salary_3 = response.xpath('//div[@class="col-xs-12 col-sm-6 col-md-4"][2]/h4/span[@class="semi-bold"][2]/text()').extract_first()
+                    salary      =temp_salary_1 + ' ' + temp_salary_2.strip() + ' - ' + temp_salary_3.strip()
+                  
+            elif(len(data_scrap)) == 3:
+                temp_salary_1 = response.xpath('//div[@class="col-xs-12 col-sm-6 col-md-4"][3]/h4/span[@class="semi-bold text-gray"]/text()').extract_first()
+                salary = temp_salary_1
+                if(salary != 'Gaji Dirahasiakan'):
+                    temp_salary_1 = response.xpath('//div[@class="col-xs-12 col-sm-6 col-md-4"][3]/h4/span[@class="semi-bold currency text-success"]/text()').extract_first()
+                    temp_salary_2 = response.xpath('//div[@class="col-xs-12 col-sm-6 col-md-4"][3]/h4/span[@class="semi-bold"][1]/text()').extract_first()
+                    temp_salary_3 = response.xpath('//div[@class="col-xs-12 col-sm-6 col-md-4"][3]/h4/span[@class="semi-bold"][2]/text()').extract_first()
+                    salary      =temp_salary_1 + ' ' + temp_salary_2.strip() + ' - ' + temp_salary_3.strip()
+                    
+            placement = None
+                    
+        # -------------------------------------------------------------------------------------------- Requirements
+            degree = None
+            major = None
+            gpa = None
+            
+            experience = None
+            data_scrap       = response.xpath('//div[@class="col-xs-12 col-sm-6 col-md-4"]')
+            if(len(data_scrap)) == 3:
+                temp_experience = response.xpath('//div[@class="col-xs-12 col-sm-6 col-md-4"][1]/h4/span[@class="semi-bold"]/text()').extract_first()
+                experience      = temp_experience.strip() 
+                
+            hardskill = None
+            softskill = None
+            max_age = None
+            gender = None
+            
+        # -------------------------------------------------------------------------------------------- Description
+            description = None
+            jobdesk = None
+            benefit = None
+            
+        # -------------------------------------------------------------------------------------------- Open Closed
+            open = None
+            closed = None
+            
+        # -------------------------------------------------------------------------------------------- Page & Terminal
+            page = response.meta.get('page_number')   
+            terminal = 1          
+        
+        # -------------------------------------------------------------------------------------------- My SQL
+            mydb = mysql.connector.connect(
+              host="localhost",
+              user="root",
+              passwd="",
+              database="karir"
+            )
+
+            mycursor = mydb.cursor()
+
+            sql = "INSERT INTO `jobsid`(`source`, `url`, `company`, `address`, `city`, `phone`, `website`, `industry`, `domain`, `tittle`, `position`, `salary`, `placement`, `requirement`, `degree`, `major`, `gpa`, `experience`, `hardskill`, `softskill`, `max_age`, `gender`, `description`, `jobdesk`, `benefit`, `open`, `closed`, `page`, `terminal`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            val = (source, url, company, address, city, phone, website, industry, domain, tittle, position, salary, placement, requirement, degree, major, gpa, experience, hardskill, softskill, max_age, gender, description, jobdesk, benefit, open, closed, page, terminal)
+            mycursor.execute(sql, val)
+
+            mydb.commit()
+        
+         # ------------------------------------------------------------------------------- 
+            yield {'source': source, 
+                   'url': url, 
+                   
+                   'company' : company, 
+                   'address' : address, 
+                   'city' : city, 
+                   'phone' : phone, 
+                   'website' : website, 
+                   'industry' : industry, 
+                   
+                   'domain' : domain, 
+                   'tittle' : tittle, 
+                   'position' : position, 
+                   'salary' : salary, 
+                   'placement' : placement, 
+                                      
+                   'requirement' : requirement,                    
+                   'degree' : degree,                    
+                   'major' : major,                    
+                   'gpa' : gpa,                    
+                   'experience' : experience, 
+                   'hardskill' : hardskill, 
+                   'softskill' : softskill,
+                   'max_age' : max_age,
+                   'gender' : gender,
+                   
+                   'description' : description,
+                   'jobdesk' : jobdesk,
+                   'benefit' : benefit,
+                   
+                   'open' : open,
+                   'closed' : closed,
+                   
+                   'page' : page, 
+                   'terminal' : terminal
+                  }
